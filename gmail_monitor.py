@@ -95,7 +95,7 @@ def poll_gmail_account(service, keywords):
         for keyword in keywords:
             if keyword in msg_subject or keyword in msg_subject:
                 msg_infos.append(
-                    MessageInfo(msg_from, msg_subject, msg_to, msg_date)
+                    MessageInfo(msg_from, msg_to, msg_subject, msg_date)
                 )
 
     return msg_infos
@@ -106,7 +106,10 @@ def send_msg_to_lark(info, webhook):
     data = {
         "msg_type": "text",
         "content": {
-            "text": f"from: {info.msg_from}, to: {info.msg_to}, to: {info.msg_subject}, date: {info.msg_date}"
+            "text": f"From: {info.msg_from}\n"
+            + f"To: {info.msg_to}\n"
+            + f"Subject: {info.msg_subject}\n"
+            + f"Date: {info.msg_date}\n"
         },
     }
     response = requests.post(webhook, json=data, headers=headers)
