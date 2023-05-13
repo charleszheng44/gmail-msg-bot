@@ -7,6 +7,7 @@ import pickle
 import argparse
 import threading
 import datetime
+import logging
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -16,14 +17,26 @@ from googleapiclient.discovery import build
 # If modifying these SCOPES, delete the file token.pickle.
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
-DefaultRecordTTL = 3  # 3 hours
+DefaultRecordTTL = 3 * 60 * 60  # 3 hours
+DefaultGCInterval = 60  # 1 min
+DefaultPollingInterval = 5 * 60  # 5 mins
+
+# Configure the logging module
+logging.basicConfig(
+    level=logging.DEBUG,  # Set the root logger level to DEBUG
+    format="%(asctime)s [%(levelname)s]: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+# Create a logger instance for your module or application
+logger = logging.getLogger("gmail-bot")
 
 
 class HistRecords:
-    def __init__(self, ttl=DefaultRecordTTL):
+    def __init__(self):
         self.records = []
         self.lock = threading.Lock()
-        self.ttl = ttl * 60 * 60
+        self.ttl = DefaultRecordTTL
 
     def run(self):
         def stale(tup):
@@ -34,7 +47,7 @@ class HistRecords:
         while True:
             with self.lock:
                 self.records = [x for x in self.records if not stale(x)]
-            time.sleep(10 * 60)
+            time.sleep(DefaultGCInterval)
 
     def add_record(self, msg_info):
         with self.lock:
@@ -47,7 +60,7 @@ class HistRecords:
 
     def __exist__(self, msg_info):
         for r in self.records:
-            if msg_info == r[1]:
+            if msg_info.equal(r[1]):
                 return True
         return False
 
@@ -58,6 +71,14 @@ class MessageInfo:
         self.msg_to = msg_to
         self.msg_subject = msg_subject
         self.msg_date = msg_date
+
+    def equal(self, other):
+        return (
+            self.msg_from == other.msg_from
+            and self.msg_to == other.msg_to
+            and self.msg_subject == other.msg_subject
+            and self.msg_date == other.msg_date
+        )
 
 
 def get_credentials(token_file):
@@ -142,25 +163,29 @@ def monitor_gmail_account(keywords, token_file, webhook, hist_rds):
     while True:
         msg_infos = poll_gmail_account(service, keywords)
         for msg_info in msg_infos:
-            send_msg_to_lark(msg_info, webhook, hist_rds)
-        time.sleep(60)
+            if hist_rds.exist(msg_info):
+                logger.debug(f"{msg_info} will not be sent")
+            else:
+                send_msg_to_lark(msg_info, webhook, hist_rds)
+        time.sleep(DefaultPollingInterval)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Gmail bot")
     parser.add_argument("-t", "--token", help="path to the gmail token file")
     parser.add_argument("-w", "--webhook", help="feishu bot webhook link")
-    parser.add_argument(
-        "-i", "--interval", help="gmail polling interval in secs"
-    )
-    parser.add_argument(
-        "-l", "--ttl", help="time to live for an individual record", default=3
-    )
     args = parser.parse_args()
+
+    # Configure the logging module
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s]: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     keywords = ["test"]
 
-    hist_rds = HistRecords(args.ttl)
+    hist_rds = HistRecords()
 
     t1 = threading.Thread(
         target=monitor_gmail_account,
