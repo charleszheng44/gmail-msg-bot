@@ -174,6 +174,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Gmail bot")
     parser.add_argument("-t", "--token", help="path to the gmail token file")
     parser.add_argument("-w", "--webhook", help="feishu bot webhook link")
+    parser.add_argument(
+        "-k", "--keywords", help="list of keywords seperated by comma"
+    )
     args = parser.parse_args()
 
     # Configure the logging module
@@ -183,7 +186,9 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    keywords = ["test"]
+    keywords = []
+    if args.keywords:
+        keywords = args.keywords.split(",")
 
     hist_rds = HistRecords()
 
